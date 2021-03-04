@@ -16,8 +16,6 @@ testing purposes.
 
 ### Prerequisites
 
-What things you need to install the software:
-
 ```
 - Python 3.7
 ```
@@ -29,7 +27,7 @@ pip install requirements.txt
 python -m spacy download en_core_web_lg
 ```
 ### Use
-- Run methodology
+- Run the HASHET model
 ```
 python run.py
 ```
@@ -39,7 +37,7 @@ python run.py
 The dataset available in the `input/` folder is a sample of 100 tweets which has the sole purpose of showing 
 the functioning of the methodology. Each tweet is a json formatted string.
 
-The real datasets on which HASHED has been validated are in the `used_dataset` folder.
+The real datasets on which HASHET has been validated are in the `used_dataset` folder.
 In accordance with Twitter API Terms, only Tweet IDs are provided as part of this datasets. 
 To recollect tweets based on the list of Tweet IDs contained in these datasets you will need to use tweet 
 'rehydration' programs.
