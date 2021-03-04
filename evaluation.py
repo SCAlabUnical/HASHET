@@ -1,34 +1,7 @@
 import numpy as np
 
-import constants as c
-import dataset_handler as dh
-import model as mlp
-import word_embedding_model as emb
-
 NEUTRAL = -1
 AMBIGUOUS = -2
-
-
-def prepare_data(test_embedding, test_hts_lists):
-    test = dh.load(c.TEST_CORPUS)
-    hashtags_test = []
-    words_test = []
-    tweet_emb_list = None
-    if test_embedding is not None and test_hts_lists is not None:
-        print('using input parameters for evaluation')
-        tweet_emb_list = test_embedding
-        hashtags_test = test_hts_lists
-    else:
-        print('evaluation from corpus')
-        for tweet in test:
-            ht_list = dh.hashtags_list(tweet)
-
-            if len(ht_list) > 0:
-                hashtags_test.append(ht_list)
-                words_test.append(tweet)
-        tweet_emb_list, hashtags_test = dh.get_sentence_embeddings_for_testing(words_test, hashtags_test)
-
-    return tweet_emb_list, hashtags_test
 
 
 def recall_score(predicted, original):
@@ -40,17 +13,17 @@ def recall_score(predicted, original):
     return (countPredicted / len(original))
 
 
-def global_nhe_evaluation(hashtags_test, emb_sentences_test, model, max_iterations=6):
+def global_nhe_evaluation(hashtags_test, sentences_test, model, max_iterations=6):
     """
         Evaluates recall, precision and f1 score on on each expansion iteration.
         Use global nearest hashtag expansion.
 
         param1: hashtags_test: original test set hashtag list of list.
-        param2: emb_sentences_test: input sentence embeddings for making model predictions.
+        param2: sentences_test: input sentences for making model predictions.
         param3: model: mlp model.
         param4: max_iterations: max number of expansions.
     """
-    predicted_hashtag_list = model.predict_top_k_hashtags(emb_sentences_test, 50)
+    predicted_hashtag_list = model.predict_top_k_hashtags(sentences_test, 50)
 
     for n in range(0, max_iterations):
         print('RECALL VALUES FOR n: ' + str(n))
@@ -59,17 +32,17 @@ def global_nhe_evaluation(hashtags_test, emb_sentences_test, model, max_iteratio
         print()
 
 
-def local_nhe_evaluation(hashtags_test, emb_sentences_test, model, max_iterations=6):
+def local_nhe_evaluation(hashtags_test, sentences_test, model, max_iterations=6):
     """
         Evaluates recall, precision and f1 score on on each expansion iteration.
         Use local nearest hashtag expansion.
 
         param1: hashtags_test: original test set hashtag list of list.
-        param2: emb_sentences_test: input sentence embeddings for making model predictions.
+        param2: sentences_test: input sentences for making model predictions.
         param3: model: mlp model.
         param4: max_iterations: max number of expansions.
     """
-    predicted_hashtag_list = model.predict_top_k_hashtags(emb_sentences_test, 50)
+    predicted_hashtag_list = model.predict_top_k_hashtags(sentences_test, 50)
 
     for n in range(0, max_iterations):
         print('VALUES FOR n: ' + str(n))
@@ -146,103 +119,3 @@ def compute_scores(hashtags_test, predicted_hashtag_list, count=5):
     print("AVERAGE F1 SCORE")
     print(np.round(weightedF1score, 3))
     print()
-
-
-# -------------------------------------------------------------------------------------------------------
-
-
-# calculates the polarization from a list of hashtags, a polarized value is greater than zero
-def polarization(ht_list):
-    hillary = False
-    trump = False
-    for h in ht_list:
-        if h[1:] in c.KEYS[c.HILLARY]:
-            hillary = True
-        elif h[1:] in c.KEYS[c.TRUMP]:
-            trump = True
-    if hillary and not trump:
-        return c.HILLARY
-    elif trump and not hillary:
-        return c.TRUMP
-    elif trump and hillary:
-        return AMBIGUOUS
-    return NEUTRAL
-
-
-def hashtags_only(tuple_list):
-    h_list = [t[0] for t in tuple_list]
-    return h_list
-
-
-def prepare_polarized_data():
-    test = dh.load(c.TEST_CORPUS)
-    print('Test tweets: ' + str(len(test)))
-    ht_test_list = []
-    words_test = []
-
-    for tweet in test:
-        ht_list = dh.hashtags_list(tweet)
-
-        pol = polarization(ht_list)
-        if len(ht_list) > 0 and pol >= 0:
-            ht_test_list.append(ht_list)
-            words_test.append(" ".join(tweet))
-
-    tweet_emb_list, ht_test_list = dh.get_sentence_embeddings_for_testing(words_test, ht_test_list)
-
-    return tweet_emb_list, ht_test_list
-
-
-def global_nhe_polarization_evaluation(model, max_iterations=6):
-    """
-        Evaluates recall, precision and f1 score on on each expansion iteration.
-        Use global nearest hashtag expansion.
-
-        param1: model: mlp model.
-        param2: max_iterations: max number of expansions.
-    """
-    tweet_emb_list, ht_test_list = prepare_polarized_data()
-    predicted_hashtag_list = mlp.predict_top_k_hashtags(tweet_emb_list, 50)
-    print('Polarized tweets: ' + str(len(ht_test_list)))
-
-    for n in range(0, max_iterations):
-        print('POLARIZATION VALUES FOR n: ' + str(n))
-        predicted_hashtag_list_bounded = model.global_nhe(ht_test_list, predicted_hashtag_list, n)
-        evaluate_polarization(ht_test_list, predicted_hashtag_list_bounded)
-        print()
-
-
-def evaluate_polarization(ht_test_list, predicted_h_list):
-    """
-        Evaluates polarization case study.
-
-        param1: ht_test_list: original tweets hashtags.
-        param2: predicted_h_list: predicted tweets hashtags
-    """
-    correct = 0
-    neutral = 0
-    ambiguous = 0
-    incorrect = 0
-    den = len(ht_test_list)
-    for ht_test, pred_list in zip(ht_test_list, predicted_h_list):
-        predicted_polarization = polarization(hashtags_only(pred_list))
-
-        target_pol = polarization(ht_test)
-
-        if predicted_polarization == target_pol:
-            correct += 1
-        elif predicted_polarization == NEUTRAL:
-            neutral += 1
-        elif predicted_polarization == AMBIGUOUS:
-            ambiguous += 1
-        else:
-            incorrect += 1
-
-    print('Correct polarization score: ')
-    print(round(correct / den, 4))
-    print('Neutral polarization score: ')
-    print(round(neutral / den, 4))
-    print('Ambiguous polarization score: ')
-    print(round(ambiguous / den, 4))
-    print('Incorrect polarization score: ')
-    print(round(incorrect / den, 4))

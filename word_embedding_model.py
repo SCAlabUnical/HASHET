@@ -10,10 +10,10 @@ import constants as c
 
 URL_REGEX = r"@\w*|https?:?\/?\/?[\w.\/]*|https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&\/=]*)"
 not_lemmatize = []
-LATENT_SPACE_DIM = 150
-WINDOW_SIZE = 5
+LATENT_SPACE_DIM = c.LATENT_SPACE_DIM
+WINDOW_SIZE = c.WINDOW_SIZE
 REMOVE_WORDS = ['rt', 'ht', 'htt', 'https', 'http', 'https t']
-INPUT_PATH = "input"
+INPUT_PATH = "input_covid"
 
 
 def create_and_train_Word2Vec_model(sentences, mincount=5):
