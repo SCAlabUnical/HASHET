@@ -1,16 +1,13 @@
 #!/usr/bin/env python
 import json
 import random
+import numpy as np
 import re  # For preprocessing
 from pickle import dump
 from pickle import load as pkload
 
 import pandas as pd  # For data handling
 import spacy
-import tensorflow as tf
-import tensorflow_hub as hub
-from gensim.models.phrases import Phrases, Phraser
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 import constants as c
 import word_embedding_model as emb
@@ -50,7 +47,7 @@ def get_tweet_corpus(state=None, no_retweet=True):
         files = [state]
     for file_path in files:
         print(" - file: " + file_path)
-        with open("input//" + file_path, 'r', encoding="utf8") as input_file:
+        with open(input_path + file_path, 'r', encoding="utf8") as input_file:
             i = 0
             for line in input_file:
                 if i % 5000 == 0:
@@ -86,17 +83,11 @@ def clean_and_phrase(corpus_tweets):
 
         corpus_cleaned.append(' '.join(tweet_cleaned))
 
-    nlp = spacy.load('en_core_web_lg',
-                     disable=['parser', 'ner', 'tagger'])  # ner (named entity recognizer) disabilitato
+    nlp = spacy.load('en_core_web_lg', disable=['parser', 'ner', 'tagger'])
     # Taking advantage of spaCy .pipe() attribute to speed-up the cleaning process:
     txt = [cleaning(words_doc) for words_doc in nlp.pipe(corpus_cleaned, batch_size=5000, n_threads=-1)]
 
-    sent = [row.split() for row in txt]
-    # taking bigrams
-    phrases = Phrases(sent, min_count=10, progress_per=10000)
-    bigram = Phraser(phrases)
-    sentences = bigram[sent]
-    return sentences
+    return txt
 
 
 def store(corpus, file):
@@ -136,7 +127,9 @@ def preprocess_data(save_file="sentences.txt"):
     corpus_dataframe = get_tweet_corpus(no_retweet=False)
     tweet_corpus = corpus_dataframe['tweets']
     sentences = clean_and_phrase(tweet_corpus)
-    store(sentences, save_file)
+    with open(save_file, 'w', encoding="utf8") as stream_out:
+        for line in sentences:
+            stream_out.write(line+'\n')
 
 
 def preprocess_data_for_sentence_embedding(file=None):
@@ -231,38 +224,18 @@ def prepare_train_test(perc_test):
     store(cleaned_corpus_with_bigrams[:int(len(cleaned_corpus_with_bigrams) * perc_test)], c.TEST_CORPUS)
 
 
-def get_sentence_embeddings_for_testing(sentences, hashtags):
-    cleaned_sentences, hashtags = remove_hashtags_from_sentences(sentences, hashtags, populate_dictionary=False)
-    return google_sentence_embedding(cleaned_sentences), hashtags
-
-
-def google_sentence_embedding(sentences):
-    print('Loading Google Universal Sentence Encoder')
-    embed = hub.load(GUSE_PATH)
-    print('Calculating sentence embeddings')
-    with tf.Session() as session:
-        session.run([tf.global_variables_initializer(), tf.tables_initializer()])
-        sentence_embeddings = session.run(embed(sentences))
-    minmax_scaler = pkload(open(c.MINMAX_SCALER_FILENAME, 'rb'))
-    std_scaler = pkload(open(c.STD_SCALER_FILENAME, 'rb'))
-    minmax_scaler.fit_transform(sentence_embeddings)
-    std_scaler.fit_transform(sentence_embeddings)
-
-    return sentence_embeddings
-
-
-def hashtags_list(tweet):
+def hashtags_list(tweet, model):
     ht_list = []
     for w in tweet:
         word_cleaned = re.sub('[^#\\d\\w_]+', ' ', w).lower().strip()
         for word in word_cleaned.split():
-            if word[0] is '#':
+            if word[0] == '#':
                 word_cleaned = word
                 break
         for r in emb.REMOVE_WORDS:
             if r == word_cleaned:
                 word_cleaned = ''
-        if len(word_cleaned) > 1 and '#' in word_cleaned:
+        if len(word_cleaned) > 1 and '#' in word_cleaned and word_cleaned in model.wv.vocab:
             ht_list.append(word_cleaned)
     return ht_list
 
@@ -278,7 +251,17 @@ def count_words(tweets):
 
 def remove_hashtags_from_sentences(tweets, hts, populate_dictionary=True):
     if c.SKIP_HASHTAG_REMOVING:
-        return tweets, hts
+        result_tweets = []
+        for tweet in tweets:
+            tweet_string = ""
+            for w in tweet:
+                if w[0] == '#':
+                    tweet_string = tweet_string + " " + w[1:]
+                else:
+                    tweet_string = tweet_string + " " + w
+            result_tweets.append(tweet_string.strip())
+        return result_tweets, hts
+
     if populate_dictionary:
         counter = count_words(tweets)
         dump(counter, open(c.H_REMOVING_DICT, 'wb'))
@@ -292,7 +275,7 @@ def remove_hashtags_from_sentences(tweets, hts, populate_dictionary=True):
         for word in tweet:
             if word[0] == '#':
                 no_ht_word = word[1:]
-                if counter.__contains__(no_ht_word) and counter[no_ht_word] > 1:  # mincount
+                if counter.__contains__(no_ht_word) and counter[no_ht_word] > 2:  # mincount
                     norm_tweet.append(no_ht_word)
             else:
                 norm_tweet.append(word)
@@ -302,7 +285,7 @@ def remove_hashtags_from_sentences(tweets, hts, populate_dictionary=True):
     return result_tweets, result_hts
 
 
-def prepare_mlp_inputs_and_targets(w_emb):
+def prepare_model_inputs_and_targets(w_emb):
     """
         Prepare train and test <X,Y> for neural network
 
@@ -318,18 +301,17 @@ def prepare_mlp_inputs_and_targets(w_emb):
 
     ht_lists = []
     for tweet in train:
-        ht_list = hashtags_list(tweet)
+        ht_list = hashtags_list(tweet, w_emb)
         h_embedding = emb.tweet_arith_embedding(w_emb, " ".join(ht_list))
         if h_embedding is not None:
             targets_train.append(emb.np.array(h_embedding))
-            tweet_string = " ".join(tweet)
-            sentences_train.append(tweet_string)
+            sentences_train.append(tweet)
     for tweet in test:
-        ht_list = hashtags_list(tweet)
+        ht_list = hashtags_list(tweet, w_emb)
         h_embedding = emb.tweet_arith_embedding(w_emb, " ".join(ht_list))
         if h_embedding is not None:
             targets_test.append(h_embedding)
-            sentences_test.append(" ".join(tweet))
+            sentences_test.append(tweet)
             ht_lists.append(ht_list)
 
     sentences_train_len = len(sentences_train)
@@ -340,26 +322,10 @@ def prepare_mlp_inputs_and_targets(w_emb):
     targets.extend(targets_test)
     sentences, targets = remove_hashtags_from_sentences(sentences, targets)
 
-    print('Loading Google Universal Sentence Encoder')
-    embed = hub.load(GUSE_PATH)
-    print('Calculating sentence embeddings')
-    with tf.Session() as session:
-        session.run([tf.global_variables_initializer(), tf.tables_initializer()])
-        sentence_embeddings = session.run(embed(sentences))
+    targets_train = np.array(targets[:targets_train_len])
+    targets_test = np.array(targets[targets_train_len:])
 
-    # scale to range [0, 1]
-    minmax_scaler = MinMaxScaler(copy=False, feature_range=(0, 1))
-    minmax_scaler.fit_transform(sentence_embeddings)
-    # standardize to have mean = 0 & variance = 1
-    std_scaler = StandardScaler(copy=False)
-    std_scaler.fit_transform(sentence_embeddings)
-    dump(minmax_scaler, open(c.MINMAX_SCALER_FILENAME, 'wb'))
-    dump(std_scaler, open(c.STD_SCALER_FILENAME, 'wb'))
+    sentences_train = np.array(sentences[:sentences_train_len])
+    sentences_test = np.array(sentences[sentences_train_len:])
 
-    targets_train_emb = emb.np.array(targets[:targets_train_len])
-    targets_test_emb = emb.np.array(targets[targets_train_len:])
-
-    sentences_train_emb = sentence_embeddings[:sentences_train_len]
-    sentences_test_emb = sentence_embeddings[sentences_train_len:]
-
-    return sentences_train_emb, sentences_test_emb, targets_train_emb, targets_test_emb, ht_lists
+    return sentences_train, sentences_test, targets_train, targets_test, ht_lists
