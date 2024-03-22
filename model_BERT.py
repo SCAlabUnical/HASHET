@@ -35,10 +35,9 @@ def transfer_and_fine_tune(sentences_train, sentences_test, targets_train, targe
     import keras.layers as layers
 
     input1 = layers.Input(shape=(sequence_len,), dtype=tf.int32, name='input_ids')
-    input2 = layers.Input(shape=(sequence_len,), dtype=tf.int32, name='token_type_ids')
-    input3 = layers.Input(shape=(sequence_len,), dtype=tf.int32, name='attention_mask')
+    input2 = layers.Input(shape=(sequence_len,), dtype=tf.int32, name='attention_mask')
 
-    input = [input1, input2, input3]
+    input = [input1, input2]
     from transformers import TFBertModel
     encoderlayer = TFBertModel.from_pretrained('bert-base-uncased', output_hidden_states=True)
     for l in encoderlayer.layers[:]:
@@ -68,10 +67,10 @@ def transfer_and_fine_tune(sentences_train, sentences_test, targets_train, targe
                          save_best_only=True, save_weights_only=True)
 
     # train model testing it on each epoch
-    model.fit([np.array(train_encodings["input_ids"]), np.array(train_encodings["token_type_ids"]),
+    model.fit([np.array(train_encodings["input_ids"]),
                np.array(train_encodings["attention_mask"])],
               targets_train, validation_data=(
-            [np.array(test_encodings["input_ids"]), np.array(test_encodings["token_type_ids"]),
+            [np.array(test_encodings["input_ids"]),
              np.array(test_encodings["attention_mask"])],
             targets_test),
               batch_size=c.BATCH_SIZE, epochs=c.MAX_EPOCHS, verbose=c.ONE_LINE_PER_EPOCH, callbacks=[es, mc])
@@ -92,10 +91,10 @@ def transfer_and_fine_tune(sentences_train, sentences_test, targets_train, targe
     mc = ModelCheckpoint(best_weights_file, monitor='val_loss', mode='min', verbose=c.ONE_LINE_PER_EPOCH,
                          save_best_only=True, save_weights_only=True)
     # train model testing it on each epoch
-    model.fit([np.array(train_encodings["input_ids"]), np.array(train_encodings["token_type_ids"]),
+    model.fit([np.array(train_encodings["input_ids"]),
                np.array(train_encodings["attention_mask"])],
               targets_train, validation_data=(
-            [np.array(test_encodings["input_ids"]), np.array(test_encodings["token_type_ids"]),
+            [np.array(test_encodings["input_ids"]),
              np.array(test_encodings["attention_mask"])],
             targets_test),
               batch_size=c.BATCH_SIZE, epochs=c.MAX_EPOCHS, verbose=c.ONE_LINE_PER_EPOCH, callbacks=[es, mc])
@@ -118,10 +117,9 @@ def predict_top_k_hashtags(sentences, k):
     import keras.layers as layers
     # Model reconstruction
     input1 = layers.Input(shape=(sequence_len,), dtype=tf.int32, name='input_ids')
-    input2 = layers.Input(shape=(sequence_len,), dtype=tf.int32, name='token_type_ids')
-    input3 = layers.Input(shape=(sequence_len,), dtype=tf.int32, name='attention_mask')
+    input2 = layers.Input(shape=(sequence_len,), dtype=tf.int32, name='attention_mask')
 
-    input = [input1, input2, input3]  # {"input_word_ids": input1, "input_mask": input2, "input_types_ids": input3}
+    input = [input1, input2]
     from transformers import TFBertModel
     encoderlayer = TFBertModel.from_pretrained('bert-base-uncased', output_hidden_states=True)
     for l in encoderlayer.layers[:]:
@@ -148,7 +146,7 @@ def predict_top_k_hashtags(sentences, k):
     model.load_weights(c.MODEL_WEIGHTS_FILE_NAME)
 
     # make probability predictions with the model
-    h_list = model.predict([np.array(sentences_encodings["input_ids"]), np.array(sentences_encodings["token_type_ids"]),
+    h_list = model.predict([np.array(sentences_encodings["input_ids"]),
                             np.array(sentences_encodings["attention_mask"])])
 
     h_list = [np.reshape(h_vect, (len(h_vect),)) for h_vect in h_list]
