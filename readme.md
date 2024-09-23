@@ -7,7 +7,7 @@ The results reveal the effectiveness of HASHET in predicting one or more correct
 Our approach has been compared to the most relevant techniques used in the literature (generative models, unsupervised models and attention-based supervised models) by achieving up to 15% improvement in F-score for the hashtag recommendation task and 9% for the topic discovery task.
 
 ## How to cite
-R. Cantini, F. Marozzo, G. Bruno and P. Trunfio. Learning sentence-to-hashtags semantic mapping for hashtag recommendation on microblogs. ACM Transactions on Knowledge Discovery from Data. Under review.
+R. Cantini, F. Marozzo, G. Bruno, P. Trunfio, "Learning sentence-to-hashtags semantic mapping for hashtag recommendation on microblogs". ACM Transactions on Knowledge Discovery from Data, vol. 16, n. 2, pp. 1-26, 2022.
 
 ## Getting Started
 
